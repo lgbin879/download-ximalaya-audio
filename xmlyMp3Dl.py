@@ -110,11 +110,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     webUrl = args.url
     outputFile = args.output
-    Index = False
+    noIndex = False
 
     # input url format checker
-    if webUrl.find(urlModel0) == 0 or  webUrl.find(urlModel1) == 0:
-    	pass
+    if os.path.isfile(webUrl):
+        pass
+    elif webUrl.find(urlModel0) == 0 or webUrl.find(urlModel1) == 0:
+        pass
     else:
     	sys.exit('\n ## Error : unrecognize url, please input correct url format like : ' + defaultAlbumUrl)
 
