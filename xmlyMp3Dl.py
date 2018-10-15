@@ -115,7 +115,7 @@ if __name__ == '__main__':
     # input url format checker
     if os.path.isfile(webUrl):
         pass
-    elif webUrl.find(urlModel0) == 0 or webUrl.find(urlModel1) == 0:
+    elif re.match(r'http[s]?://www.ximalaya.com/\w+/\d+', webUrl):
         pass
     else:
     	sys.exit('\n ## Error : unrecognize url, please input correct url format like : ' + defaultAlbumUrl)
@@ -123,8 +123,8 @@ if __name__ == '__main__':
     if args.output:
     	outputFile = args.output
     else:
-        outputFile = defaultOutputFile
         print('## Info : save result to default File : ', defaultOutputFile)
+        outputFile = defaultOutputFile
 
     if args.noIndex:
     	print("## Info : don't add index to prefix")
