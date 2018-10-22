@@ -37,16 +37,13 @@ headers = {
 
 defaultOutputFile = 'dl_xmly.sh'
 
-urlModel0 = 'https://www.ximalaya.com/'
-urlModel1 = 'http://www.ximalaya.com/'
 defaultAlbumUrl = 'https://www.ximalaya.com/ertong/11106118'
-
 
 #albumId=3533672(aId), pageNum=1(pNum)
 fetchUrlModel = 'https://www.ximalaya.com/revision/play/album?albumId=aId&pageNum=pNum&sort=-1&pageSize=30'
 
 
-def main(albumUrl, outputFile, noIndex):
+def main(albumUrl, outputFile, noIndex, pageList):
     f = open(outputFile, 'w+')
 
     res = requests.get(albumUrl, headers=headers)
@@ -54,16 +51,21 @@ def main(albumUrl, outputFile, noIndex):
 
     # extract number from string
     albumIdStr = re.findall('\d+', albumUrl)[0]
-    songNum = int(re.findall('\d+', soup.findAll('h2', attrs={'class': 'dOi2'})[0].text)[0])
+    songNum = int(re.findall('\d+', soup.findAll('h2')[0].text)[0])
 
-    if len(soup.findAll('input', attrs={'class': 'Yetd control-input'})):
-        pageNum = int(soup.find_all('input', attrs={'class': 'Yetd control-input'})[0]["max"])
+    if len(pageList) == 0:
+        if len(soup.findAll('input', attrs={'class': 'control-input'})):
+            pageNum = int(soup.findAll('input', attrs={'class': 'control-input'})[0]['max'])
+        else:
+            pageNum = 1
+
+        pList = range(1, pageNum+1)
+        print("## Info : albumIdStr = %s, pageNum = %d, songNum = %d" %(albumIdStr, pageNum, songNum))
     else:
-        pageNum = 1
-
-    print("## Info : albumIdStr = %s, pageNum = %d, songNum = %d" %(albumIdStr, pageNum, songNum))
+        pList = pageList
     
-    for i in range(1, pageNum+1):
+    for i in pList:
+        i = int(i)
         pageUrl = albumUrl+r'/p'+str(i)
         fetchUrl = fetchUrlModel.replace('aId', albumIdStr).replace('pNum', str(i))
         resPage = requests.get(fetchUrl, headers=headers)
@@ -103,9 +105,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='download all audioes in ximalay album like :' + defaultAlbumUrl)
     parser.add_argument('url', type=str, help="web url need to download")
     parser.add_argument("-o", "--output", help="output file name")
-    parser.add_argument("-v", "--verbosity", help="increase output verbosity", action="store_true")
+    parser.add_argument("-p", "--page", help="specify page need to download")
     parser.add_argument("-n", "--noIndex", help="not add index to prefix", action="store_true")
-    
+    parser.add_argument("-v", "--verbosity", help="increase output verbosity", action="store_true")
 
     args = parser.parse_args()
     webUrl = args.url
@@ -126,8 +128,21 @@ if __name__ == '__main__':
         print('## Info : save result to default File : ', defaultOutputFile)
         outputFile = defaultOutputFile
 
+    charList=[',', '.',  r'/', r'\\']
+    if args.page:
+        pageList = list(args.page)
+        for p in pageList:
+            if p in charList:
+                pageList.remove(p)
+            else:
+                p = int(p)
+
+        print('download pages in'+str(pageList))
+    else:
+        pageList = []
+
     if args.noIndex:
     	print("## Info : don't add index to prefix")
     	noIndex = True
 
-    main(webUrl, outputFile, noIndex)
+    main(webUrl, outputFile, noIndex, pageList)
