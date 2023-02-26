@@ -25,10 +25,11 @@ import os
 import re
 import sys
 import json
+import copy
 import requests
 import argparse
 import subprocess
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 
 
 headers = {
@@ -43,106 +44,73 @@ defaultAlbumUrl = 'https://www.ximalaya.com/ertong/11106118'
 fetchUrlModel = 'https://www.ximalaya.com/revision/play/album?albumId=aId&pageNum=pNum&sort=-1&pageSize=30'
 
 
-def main(albumUrl, outputFile, noIndex, pageList):
-    f = open(outputFile, 'w+')
+def get_song_info_list(album_id=3533672, page_size=30):
+    print("## get_song_info_list")
+    song_info_list = []
+    song_info = {}
+    for page in range(1, 20):
+        url = f'https://www.ximalaya.com/revision/album/v1/getTracksList?albumId={album_id}&pageNum={page}&sort=1&pageSize={page_size}'
+        res = requests.get(url=url, headers=headers)
+        print(url)
+        jsonData = json.loads(res.text)
+        tracks_list = jsonData['data']['tracks']
+        if tracks_list:
+            for track in tracks_list:
+                # print(track)
+                idx = track['index']
+                title = track['title']
+                song_info["trackId"] = track['trackId']
+                song_info["name"] = f"p{idx:03d}_{title}"
+                song_info_list.append(copy.deepcopy(song_info))
 
-    res = requests.get(albumUrl, headers=headers)
-    soup = BeautifulSoup(res.text, "html.parser")
+    return song_info_list
 
+def get_audio_url_list(song_info_list):
+    print("## get_audio_url_list")
+    for info in song_info_list:
+        audio_info_url = f"https://www.ximalaya.com/revision/play/v1/audio?id={info['trackId']}&ptype=1"
+        res = requests.get(url=audio_info_url, headers=headers)
+        print(audio_info_url)
+    #     print(res.text)
+        jsonData = json.loads(res.text)
+        if jsonData["ret"] != 200:
+            continue
+        if "src" in jsonData["data"]:
+            info['audio_url'] = jsonData["data"]["src"]    
+
+    return song_info_list
+
+def get_download_sh(song_info_list, filename="./dl.sh"):
+    with open(filename, mode='w') as f:
+        for info in song_info_list:
+            song_name = info['name'].replace("-","_").replace(" ","")
+            if "audio_url" in info:
+                wget_str = f"wget -O {song_name}.m4a {info['audio_url']}\n"
+                print(wget_str)
+                f.write(wget_str)
+        ffmpeg_str = 'for i in *.m4a; do ffmpeg -i "$i" "${i%.*}.mp3"; done '
+        f.write(ffmpeg_str)
+    print(f"save file to {filename}")
+
+
+def main(albumUrl, outputFile):
     # extract number from string
     albumIdStr = re.findall('\d+', albumUrl)[0]
-    songNum = int(re.findall('\d+', soup.findAll('h2')[0].text)[0])
+    song_info_list = get_song_info_list(album_id=albumIdStr, page_size=30)
+    song_info_list = get_audio_url_list(song_info_list)
+    get_download_sh(song_info_list, filename=outputFile)
 
-    if len(pageList) == 0:
-        if len(soup.findAll('input', attrs={'class': 'control-input'})):
-            pageNum = int(soup.findAll('input', attrs={'class': 'control-input'})[0]['max'])
-        else:
-            pageNum = 1
-
-        pList = range(1, pageNum+1)
-        print("## Info : albumIdStr = %s, pageNum = %d, songNum = %d" %(albumIdStr, pageNum, songNum))
-    else:
-        pList = pageList
-    
-    for i in pList:
-        i = int(i)
-        pageUrl = albumUrl+r'/p'+str(i)
-        fetchUrl = fetchUrlModel.replace('aId', albumIdStr).replace('pNum', str(i))
-        resPage = requests.get(fetchUrl, headers=headers)
-
-        if resPage.status_code == 200:
-            print('\n## Info : Success get %s\n' %(fetchUrl))
-        else:
-            sys.exit('\n## Error : Error while getting %s\n' %(fetchUrl))
-
-        msgJson = json.loads(resPage.text)
-        pageSize = len(msgJson['data']['tracksAudioPlay']) 
-
-        for j in range(0, pageSize):
-            title = msgJson['data']['tracksAudioPlay'][j]['trackName'].replace(' ', '')
-            idx = int(msgJson['data']['tracksAudioPlay'][j]['index'])
-
-            index = idx #songNum - pageSize*i + idx - pageSize*(i-1)
-            m4aUrl = msgJson['data']['tracksAudioPlay'][j]['src']
-
-            prefix = "{:0>3}".format(str(index))+'_'
-            fileName = title+'.mp3'
-
-            if not noIndex:
-            	fileName = prefix+fileName
-
-            print('wget -O ', fileName, m4aUrl)
-            print('wget -O ', fileName, m4aUrl, file=f)
-
-
-    f.close()
     p = subprocess.Popen(["chmod", "+x", outputFile], stdout=subprocess.PIPE)
-    print('\n## Info : save result to excutable file : ' + outputFile)
-
+    print('\n for i in *.m4a; do ffmpeg -i "$i" "${i%.*}.mp3"; done \n')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='download all audioes in ximalay album like :' + defaultAlbumUrl)
     parser.add_argument('url', type=str, help="web url need to download")
-    parser.add_argument("-o", "--output", help="output file name")
-    parser.add_argument("-p", "--page", help="specify page need to download")
-    parser.add_argument("-n", "--noIndex", help="not add index to prefix", action="store_true")
-    parser.add_argument("-v", "--verbosity", help="increase output verbosity", action="store_true")
+    parser.add_argument("-o", "--output", default='./dl.sh', help="output file name")
 
     args = parser.parse_args()
     webUrl = args.url
     outputFile = args.output
-    noIndex = False
 
-    # input url format checker
-    if os.path.isfile(webUrl):
-        pass
-    elif re.match(r'http[s]?://www.ximalaya.com/\w+/\d+', webUrl):
-        pass
-    else:
-    	sys.exit('\n ## Error : unrecognize url, please input correct url format like : ' + defaultAlbumUrl)
-
-    if args.output:
-    	outputFile = args.output
-    else:
-        print('## Info : save result to default File : ', defaultOutputFile)
-        outputFile = defaultOutputFile
-
-    charList=[',', '.',  r'/', r'\\']
-    if args.page:
-        pageList = list(args.page)
-        for p in pageList:
-            if p in charList:
-                pageList.remove(p)
-            else:
-                p = int(p)
-
-        print('download pages in'+str(pageList))
-    else:
-        pageList = []
-
-    if args.noIndex:
-    	print("## Info : don't add index to prefix")
-    	noIndex = True
-
-    main(webUrl, outputFile, noIndex, pageList)
+    main(webUrl, outputFile)
