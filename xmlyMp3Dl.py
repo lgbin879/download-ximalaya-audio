@@ -83,7 +83,7 @@ def get_audio_url_list(song_info_list):
 def get_download_sh(song_info_list, filename="./dl.sh"):
     with open(filename, mode='w') as f:
         for info in song_info_list:
-            song_name = info['name'].replace("-","_").replace(" ","")
+            song_name = info['name'].replace("-","_").replace(" ","").replace("(","[").replace(")","]")
             if "audio_url" in info:
                 wget_str = f"wget -O {song_name}.m4a {info['audio_url']}\n"
                 print(wget_str)
